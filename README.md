@@ -9,3 +9,4 @@ Main changes from the original version:
  - Maven: Upgraded to use aws-lambda-java* v1.1 from v1.0
  - Maven: Locked in to use the aws-java-sdk 1.10.27 due to incompatabilities with what's currently running on AWS Lambda (odd errors about Apache httpcore due to mis-matched versions in the AWS Lambda classpath).  By specifying which version of AWS Java SDK we're on, we can force the classpath to have the version we want and avoid the runtime mis-match errors
  
+ 
