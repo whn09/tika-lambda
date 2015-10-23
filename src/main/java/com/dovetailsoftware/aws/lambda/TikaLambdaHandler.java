@@ -5,8 +5,10 @@ import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.Charset;
 import java.net.URLDecoder;
+import java.util.Iterator;
 
 import org.apache.tika.Tika;
+import org.apache.tika.metadata.Metadata;
 import org.apache.tika.exception.TikaException;
 
 import com.amazonaws.services.lambda.runtime.Context;
@@ -21,12 +23,15 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.S3Object;
 
+import org.json.simple.JSONObject;
+
 public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
 
+    private LambdaLogger _logger;
+
     public String handleRequest(S3Event s3event, Context context) {
-        LambdaLogger logger = context.getLogger();
-        logger.log("Received S3 Event: " + s3event.toJson());
-        Tika tika = new Tika();
+        _logger = context.getLogger();
+        _logger.log("Received S3 Event: " + s3event.toJson());
 
         try {
             S3EventNotificationRecord record = s3event.getRecords().get(0);
@@ -38,7 +43,7 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
 
             // Short-circuit ignore .extract files because they have already been extracted, this prevents an endless loop
             if (key.toLowerCase().endsWith(".extract")) {
-              logger.log("Ignoring extract file " + key);
+              _logger.log("Ignoring extract file " + key);
               return "Ignored";
             }
 
@@ -46,24 +51,80 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
             S3Object s3Object = s3Client.getObject(new GetObjectRequest(bucket, key));
 
             try (InputStream objectData = s3Object.getObjectContent()) {
-                logger.log("Extracting text with Tika");
-                String extractedText = tika.parseToString(objectData);
+                String extractJson = doTikaStuff(bucket, key, objectData);
 
-                byte[] extractBytes = extractedText.getBytes(Charset.forName("UTF-8"));
+                byte[] extractBytes = extractJson.getBytes(Charset.forName("UTF-8"));
                 int extractLength = extractBytes.length;
-                logger.log(extractLength + " bytes extracted by Tika");
 
                 ObjectMetadata metaData = new ObjectMetadata();
                 metaData.setContentLength(extractLength);
 
-                logger.log("Saving extract file to S3");
+                _logger.log("Saving extract file to S3");
                 InputStream inputStream = new ByteArrayInputStream(extractBytes);
                 s3Client.putObject(bucket, key + ".extract", inputStream, metaData);
             }
-        } catch (IOException | TikaException e) {
-            logger.log("Exception: " + e.getLocalizedMessage());
+        } catch (IOException e) {
+            _logger.log("Exception: " + e.getLocalizedMessage());
             throw new RuntimeException(e);
         }
         return "Success";
+    }
+
+    private String doTikaStuff(String bucket, String key, InputStream objectData) throws IOException {
+      _logger.log("Extracting text with Tika");
+      String extractedText = "";
+      Tika tika = new Tika();
+      Metadata tikaMetadata = new Metadata();
+      try {
+        extractedText = tika.parseToString(objectData, tikaMetadata);
+      } catch( TikaException e) {
+        return assembleExceptionResult(bucket, key, e);
+      }
+      return assembleExtractionResult(extractedText, tikaMetadata);
+    }
+
+    private String assembleExtractionResult(String extractedText, Metadata tikaMetadata) {
+
+      JSONObject extractJson = new JSONObject();
+
+      String contentType = tikaMetadata.get("Content-Type");
+      contentType = contentType != null ? contentType : "content/unknown";
+
+      String contentLength = tikaMetadata.get("Content-Length");
+      contentLength = contentLength != null ? contentLength : "0";
+
+      extractJson.put("Exception", null);
+      extractJson.put("Text", extractedText);
+      extractJson.put("ContentType", contentType);
+      extractJson.put("ContentLength", contentLength);
+
+      JSONObject metadataJson = new JSONObject();
+
+      for( String name : tikaMetadata.names() ){
+        String[] elements = tikaMetadata.getValues(name);
+        String joined = String.join(", ", elements);
+        metadataJson.put(name, joined);
+      }
+
+      extractJson.put("Metadata", metadataJson);
+
+      return extractJson.toJSONString();
+    }
+
+    private String assembleExceptionResult(String bucket, String key, Exception e){
+      JSONObject exceptionJson = new JSONObject();
+
+      exceptionJson.put("Exception", e.getLocalizedMessage());
+      exceptionJson.put("FilePath", "s3://" + bucket + "/" + key);
+      exceptionJson.put("ContentType", "unknown");
+      exceptionJson.put("ContentLength", "0");
+      exceptionJson.put("Text", "");
+
+      JSONObject metadataJson = new JSONObject();
+      metadataJson.put("resourceName", "s3://" + bucket + "/" + key);
+
+      exceptionJson.put("Metadata", metadataJson);
+
+      return exceptionJson.toJSONString();
     }
 }
