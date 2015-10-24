@@ -105,12 +105,14 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
         parser.parse(objectData, handler, tikaMetadata, parseContext);
         extractedText = sw.toString();
       } catch( TikaException e) {
+        _logger.log("TikaException thrown while parsing: " + e.getLocalizedMessage());
         return assembleExceptionResult(bucket, key, e);
       }
-      return assembleExtractionResult(extractedText, tikaMetadata);
+      _logger.log("Tika parsing success");
+      return assembleExtractionResult(bucket, key, extractedText, tikaMetadata);
     }
 
-    private String assembleExtractionResult(String extractedText, Metadata tikaMetadata) {
+    private String assembleExtractionResult(String bucket, String key, String extractedText, Metadata tikaMetadata) {
 
       JSONObject extractJson = new JSONObject();
 
@@ -121,6 +123,7 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
       contentLength = contentLength != null ? contentLength : "0";
 
       extractJson.put("Exception", null);
+      extractJson.put("FilePath", "s3://" + bucket + "/" + key);
       extractJson.put("Text", extractedText);
       extractJson.put("ContentType", contentType);
       extractJson.put("ContentLength", contentLength);
