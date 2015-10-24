@@ -3,13 +3,24 @@ package com.dovetailsoftware.aws.lambda;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ByteArrayInputStream;
+import java.io.StringWriter;
 import java.nio.charset.Charset;
 import java.net.URLDecoder;
 import java.util.Iterator;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.sax.SAXTransformerFactory;
+import javax.xml.transform.sax.TransformerHandler;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.TransformerConfigurationException;
+import org.xml.sax.SAXException;
 
 import org.apache.tika.Tika;
-import org.apache.tika.metadata.Metadata;
 import org.apache.tika.exception.TikaException;
+import org.apache.tika.metadata.Metadata;
+import org.apache.tika.parser.Parser;
+import org.apache.tika.parser.AutoDetectParser;
+import org.apache.tika.parser.ParseContext;
 
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
@@ -63,20 +74,32 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
                 InputStream inputStream = new ByteArrayInputStream(extractBytes);
                 s3Client.putObject(bucket, key + ".extract", inputStream, metaData);
             }
-        } catch (IOException e) {
+        } catch (IOException | TransformerConfigurationException | SAXException e) {
             _logger.log("Exception: " + e.getLocalizedMessage());
             throw new RuntimeException(e);
         }
         return "Success";
     }
 
-    private String doTikaStuff(String bucket, String key, InputStream objectData) throws IOException {
+    private String doTikaStuff(String bucket, String key, InputStream objectData) throws IOException, TransformerConfigurationException, SAXException {
       _logger.log("Extracting text with Tika");
       String extractedText = "";
+
+      SAXTransformerFactory factory = (SAXTransformerFactory)SAXTransformerFactory.newInstance();
+      TransformerHandler handler = factory.newTransformerHandler();
+      handler.getTransformer().setOutputProperty(OutputKeys.METHOD, "text");
+      handler.getTransformer().setOutputProperty(OutputKeys.INDENT, "yes");
+      StringWriter sw = new StringWriter();
+      handler.setResult(new StreamResult(sw));
+      AutoDetectParser parser = new AutoDetectParser();
+      ParseContext parseContext = new ParseContext();
+      parseContext.set(Parser.class, parser);
+
       Tika tika = new Tika();
       Metadata tikaMetadata = new Metadata();
       try {
-        extractedText = tika.parseToString(objectData, tikaMetadata);
+        parser.parse(objectData, handler, tikaMetadata, parseContext);
+        extractedText = sw.toString();
       } catch( TikaException e) {
         return assembleExceptionResult(bucket, key, e);
       }
