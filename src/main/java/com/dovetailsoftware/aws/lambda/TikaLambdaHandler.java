@@ -98,6 +98,10 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
       Tika tika = new Tika();
       Metadata tikaMetadata = new Metadata();
       try {
+        // for synthetic transactions
+        if( key.toLowerCase().endsWidth("tika.exception.testing.pdf")) {
+          throw new TikaException("Test Tika Exception");
+        }
         parser.parse(objectData, handler, tikaMetadata, parseContext);
         extractedText = sw.toString();
       } catch( TikaException e) {
