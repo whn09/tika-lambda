@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: An AWS Serverless Specification template describing your function.
+Resources:
+  tikalambda:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: 'com.henanwan.aws.lambda.TikaLambdaHandler::handleRequest'
+      Runtime: java8
+      CodeUri: .
+      Description: ''
+      MemorySize: 512
+      Timeout: 75
+      Role: 'arn:aws:iam::579019700964:role/service-role/tika-lambda-role-wlrw9p1t'
+      Events:
+        BucketEvent1:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: Bucket1
+            Events:
+              - 's3:ObjectCreated:*'
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .pdf
+  Bucket1:
+    Type: 'AWS::S3::Bucket'
