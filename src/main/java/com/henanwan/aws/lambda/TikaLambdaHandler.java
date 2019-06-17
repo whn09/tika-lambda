@@ -1,4 +1,4 @@
-package com.dovetailsoftware.aws.lambda;
+package com.henanwan.aws.lambda;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -48,7 +48,7 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
             S3EventNotificationRecord record = s3event.getRecords().get(0);
 
             String bucket = record.getS3().getBucket().getName();
-            String extractBucket = "extracts." + bucket;
+            String extractBucket = bucket + "-extracts";
 
             // Object key may have spaces or unicode non-ASCII characters.
             String key = URLDecoder.decode(record.getS3().getObject().getKey().replace('+', ' '), "UTF-8");
