@@ -13,6 +13,7 @@ import javax.xml.transform.sax.SAXTransformerFactory;
 import javax.xml.transform.sax.TransformerHandler;
 import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.TransformerConfigurationException;
+
 import org.xml.sax.SAXException;
 
 import org.apache.tika.Tika;
@@ -55,8 +56,8 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
 
             // Short-circuit ignore .extract files because they have already been extracted, this prevents an endless loop
             if (key.toLowerCase().endsWith(".extract")) {
-              _logger.log("Ignoring extract file " + key);
-              return "Ignored";
+                _logger.log("Ignoring extract file " + key);
+                return "Ignored";
             }
 
             AmazonS3 s3Client = new AmazonS3Client();
@@ -83,79 +84,79 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
     }
 
     private String doTikaStuff(String bucket, String key, InputStream objectData) throws IOException, TransformerConfigurationException, SAXException {
-      _logger.log("Extracting text with Tika");
-      String extractedText = "";
+        _logger.log("Extracting text with Tika");
+        String extractedText = "";
 
-      SAXTransformerFactory factory = (SAXTransformerFactory)SAXTransformerFactory.newInstance();
-      TransformerHandler handler = factory.newTransformerHandler();
-      handler.getTransformer().setOutputProperty(OutputKeys.METHOD, "text");
-      handler.getTransformer().setOutputProperty(OutputKeys.INDENT, "yes");
-      StringWriter sw = new StringWriter();
-      handler.setResult(new StreamResult(sw));
-      AutoDetectParser parser = new AutoDetectParser();
-      ParseContext parseContext = new ParseContext();
-      parseContext.set(Parser.class, parser);
+        SAXTransformerFactory factory = (SAXTransformerFactory) SAXTransformerFactory.newInstance();
+        TransformerHandler handler = factory.newTransformerHandler();
+        handler.getTransformer().setOutputProperty(OutputKeys.METHOD, "text");
+        handler.getTransformer().setOutputProperty(OutputKeys.INDENT, "yes");
+        StringWriter sw = new StringWriter();
+        handler.setResult(new StreamResult(sw));
+        AutoDetectParser parser = new AutoDetectParser();
+        ParseContext parseContext = new ParseContext();
+        parseContext.set(Parser.class, parser);
 
-      Tika tika = new Tika();
-      Metadata tikaMetadata = new Metadata();
-      try {
-        // for synthetic transactions
-        if( key.toLowerCase().endsWith("tika.exception.testing.pdf")) {
-          throw new TikaException("Test Tika Exception");
+        Tika tika = new Tika();
+        Metadata tikaMetadata = new Metadata();
+        try {
+            // for synthetic transactions
+            if (key.toLowerCase().endsWith("tika.exception.testing.pdf")) {
+                throw new TikaException("Test Tika Exception");
+            }
+            parser.parse(objectData, handler, tikaMetadata, parseContext);
+            extractedText = sw.toString();
+        } catch (TikaException e) {
+            _logger.log("TikaException thrown while parsing: " + e.getLocalizedMessage());
+            return assembleExceptionResult(bucket, key, e);
         }
-        parser.parse(objectData, handler, tikaMetadata, parseContext);
-        extractedText = sw.toString();
-      } catch( TikaException e) {
-        _logger.log("TikaException thrown while parsing: " + e.getLocalizedMessage());
-        return assembleExceptionResult(bucket, key, e);
-      }
-      _logger.log("Tika parsing success");
-      return assembleExtractionResult(bucket, key, extractedText, tikaMetadata);
+        _logger.log("Tika parsing success");
+        return assembleExtractionResult(bucket, key, extractedText, tikaMetadata);
     }
 
     private String assembleExtractionResult(String bucket, String key, String extractedText, Metadata tikaMetadata) {
 
-      JSONObject extractJson = new JSONObject();
+        JSONObject extractJson = new JSONObject();
 
-      String contentType = tikaMetadata.get("Content-Type");
-      contentType = contentType != null ? contentType : "content/unknown";
+        String contentType = tikaMetadata.get("Content-Type");
+        contentType = contentType != null ? contentType : "content/unknown";
 
-      String contentLength = tikaMetadata.get("Content-Length");
-      contentLength = contentLength != null ? contentLength : "0";
+        String contentLength = tikaMetadata.get("Content-Length");
+        contentLength = contentLength != null ? contentLength : "0";
 
-      extractJson.put("Exception", null);
-      extractJson.put("FilePath", "s3://" + bucket + "/" + key);
-      extractJson.put("Text", extractedText);
-      extractJson.put("ContentType", contentType);
-      extractJson.put("ContentLength", contentLength);
+        extractJson.put("Exception", null);
+        extractJson.put("FilePath", "s3://" + bucket + "/" + key);
+        extractJson.put("Text", extractedText);
+        extractJson.put("ContentType", contentType);
+        extractJson.put("ContentLength", contentLength);
 
-      JSONObject metadataJson = new JSONObject();
+        JSONObject metadataJson = new JSONObject();
 
-      for( String name : tikaMetadata.names() ){
-        String[] elements = tikaMetadata.getValues(name);
-        String joined = String.join(", ", elements);
-        metadataJson.put(name, joined);
-      }
+        for (String name : tikaMetadata.names()) {
+            String[] elements = tikaMetadata.getValues(name);
+            String joined = String.join(", ", elements);
+            metadataJson.put(name, joined);
+        }
 
-      extractJson.put("Metadata", metadataJson);
+        extractJson.put("Metadata", metadataJson);
 
-      return extractJson.toJSONString();
+        return extractJson.toJSONString();
     }
 
-    private String assembleExceptionResult(String bucket, String key, Exception e){
-      JSONObject exceptionJson = new JSONObject();
+    private String assembleExceptionResult(String bucket, String key, Exception e) {
+        JSONObject exceptionJson = new JSONObject();
 
-      exceptionJson.put("Exception", e.getLocalizedMessage());
-      exceptionJson.put("FilePath", "s3://" + bucket + "/" + key);
-      exceptionJson.put("ContentType", "unknown");
-      exceptionJson.put("ContentLength", "0");
-      exceptionJson.put("Text", "");
+        exceptionJson.put("Exception", e.getLocalizedMessage());
+        exceptionJson.put("FilePath", "s3://" + bucket + "/" + key);
+        exceptionJson.put("ContentType", "unknown");
+        exceptionJson.put("ContentLength", "0");
+        exceptionJson.put("Text", "");
 
-      JSONObject metadataJson = new JSONObject();
-      metadataJson.put("resourceName", "s3://" + bucket + "/" + key);
+        JSONObject metadataJson = new JSONObject();
+        metadataJson.put("resourceName", "s3://" + bucket + "/" + key);
 
-      exceptionJson.put("Metadata", metadataJson);
+        exceptionJson.put("Metadata", metadataJson);
 
-      return exceptionJson.toJSONString();
+        return exceptionJson.toJSONString();
     }
 }
