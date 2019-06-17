@@ -10,7 +10,7 @@ Resources:
       CodeUri: .
       Description: ''
       MemorySize: 512
-      Timeout: 75
+      Timeout: 900
       Role: 'arn:aws:iam::579019700964:role/service-role/tika-lambda-role-wlrw9p1t'
       Events:
         BucketEvent1:

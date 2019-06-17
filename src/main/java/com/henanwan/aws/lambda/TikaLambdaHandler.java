@@ -55,7 +55,7 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
             String key = URLDecoder.decode(record.getS3().getObject().getKey().replace('+', ' '), "UTF-8");
 
             // Short-circuit ignore .extract files because they have already been extracted, this prevents an endless loop
-            if (key.toLowerCase().endsWith(".extract")) {
+            if (key.toLowerCase().endsWith(".json")) {
                 _logger.log("Ignoring extract file " + key);
                 return "Ignored";
             }
@@ -74,7 +74,7 @@ public class TikaLambdaHandler implements RequestHandler<S3Event, String> {
 
                 _logger.log("Saving extract file to S3");
                 InputStream inputStream = new ByteArrayInputStream(extractBytes);
-                s3Client.putObject(extractBucket, key + ".extract", inputStream, metaData);
+                s3Client.putObject(extractBucket, key + ".json", inputStream, metaData);
             }
         } catch (IOException | TransformerConfigurationException | SAXException e) {
             _logger.log("Exception: " + e.getLocalizedMessage());
